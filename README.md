@@ -12,6 +12,19 @@ There are two programs:
 | `psclassic-launcher` | The launcher. With no arguments it opens a window laid out like the Windows launcher. With a command (`play`, `update`, `settings`, ...) it works in a terminal. |
 | `psclassic-updater` | Only the update step, as one static binary with no dependencies. Made for Heroic's "run before the game" script. |
 
+## Download
+
+Each [release](https://github.com/ltsjoe/psclassic-launcher/releases) has two builds
+for x86_64 Linux. Pick one:
+
+| File | What it is |
+|---|---|
+| `psclassic-launcher-<version>-x86_64.AppImage` | The launcher as one file. Runs on any distro with glibc 2.35 or newer. Make it executable and run it. |
+| `psclassic-launcher-<version>-steamrt4-x86_64.tar.gz` | Both programs, built in Valve's **Steam Linux Runtime 4.0** SDK. Runs inside the Steam Linux Runtime 4.0 container, or directly on a distro with glibc 2.38 or newer (SteamOS, Debian 13, Ubuntu 24.04, current Fedora and Arch). Also has `psclassic-updater` for Heroic. |
+
+`SHA256SUMS` in the release lists the checksums. Check a download with
+`sha256sum -c SHA256SUMS --ignore-missing`.
+
 ## Why
 
 The official launcher (`PlanetsideClassic.exe`) checks the signature on its update list
@@ -190,6 +203,25 @@ AppImage runtime, so the host needs no libfuse2. `appimagetool` and the runtime 
 pinned by version and SHA-256. The AppImage works like the installed program: no
 arguments opens the window, a command works in the terminal
 (`./psclassic-launcher-*.AppImage play`).
+
+### Steam Linux Runtime build
+
+```sh
+scripts/steamrt.sh    # dist/psclassic-launcher-<version>-steamrt4-x86_64.tar.gz
+```
+
+Builds both programs in Valve's Steam Runtime 4 SDK
+(`registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk`, pinned by version and digest in
+`scripts/Containerfile.steamrt`), so the launcher uses only libraries the Steam Linux
+Runtime 4.0 container has. The archive holds both programs, the menu entry, the icon,
+this README and the license. To run the launcher inside the runtime's container, use the
+runtime's `run` script. Heroic and Lutris (through umu) keep a copy in
+`~/.local/share/umu/steamrt4`:
+
+```sh
+cd psclassic-launcher-<version>-steamrt4-x86_64
+~/.local/share/umu/steamrt4/run -- ./psclassic-launcher
+```
 
 ## Contributing
 
