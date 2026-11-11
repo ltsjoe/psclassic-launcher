@@ -52,6 +52,7 @@ out="dist/psclassic-launcher-$version-x86_64.AppImage"
 	-v "$tools:/tools:ro,Z" \
 	-e APPIMAGE_EXTRACT_AND_RUN=1 -e ARCH=x86_64 -e VERSION="$version" \
 	"$image" sh -ec "
+		go version
 		app=\$(mktemp -d)/AppDir
 		mkdir -p \$app/usr/bin \$app/usr/share/applications \$app/usr/share/icons/hicolor/scalable/apps
 		go build -buildvcs=false -trimpath -ldflags='-s -w' -o \$app/usr/bin/psclassic-launcher ./cmd/psclassic-launcher

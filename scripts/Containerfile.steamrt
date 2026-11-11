@@ -1,0 +1,15 @@
+# Build environment for the Steam Linux Runtime build: Valve's Steam Runtime 4 SDK,
+# the build image for the "Steam Linux Runtime 4.0" container (Debian 13 based,
+# glibc 2.41). It is pinned by version and digest. The SDK already has the X11,
+# Wayland and OpenGL headers Fyne needs, so only Go is added, copied in from the
+# official image.
+#
+# A newer runtime: take the version and digest of the SDK's "latest" tag from
+# registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk, put them below, and delete
+# the localhost/psclassic-launcher-steamrt image so scripts/steamrt.sh builds it again.
+ARG GO_IMAGE=docker.io/library/golang:1.27-trixie
+ARG SDK_IMAGE=registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk:4.0.20261021.265997@sha256:0827d5839550c228b4e454ae2608ce09e0ff023d2bbb6bfceb9812eb5813b742
+FROM ${GO_IMAGE} AS go
+FROM ${SDK_IMAGE}
+COPY --from=go /usr/local/go /usr/local/go
+ENV PATH=/usr/local/go/bin:/root/go/bin:$PATH GOTOOLCHAIN=local
