@@ -1,0 +1,57 @@
+# The checks from scripts/check.sh, on every pull request and every push to main:
+# gofmt, go vet, go test and govulncheck. A failure shows on the PR, and the
+# branch ruleset needs this job ("check") to pass before a PR can merge.
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The newest Go, not the runner's cached one: govulncheck also checks the
+      # standard library, so an outdated Go fails the check.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          check-latest: true
+
+      # Fyne (the window) needs cgo and the X11, Wayland and OpenGL headers,
+      # the same packages as scripts/Containerfile.
+      - name: GUI headers
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+
+      - name: Tool versions
+        run: go version
+
+      - name: gofmt
+        run: |
+          bad=$(gofmt -l .)
+          if [ -n "$bad" ]; then
+            echo "gofmt needed:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -count=1 ./...
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

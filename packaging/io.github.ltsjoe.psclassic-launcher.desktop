@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Planetside Classic Launcher
+GenericName=Game launcher
+Comment=Update and play Planetside Classic with Proton or Wine (unofficial)
+Exec=psclassic-launcher
+Icon=io.github.ltsjoe.psclassic-launcher
+Terminal=false
+Categories=Game;
+Keywords=planetside;psclassic;launcher;

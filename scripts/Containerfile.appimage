@@ -1,0 +1,13 @@
+# Build environment for the AppImage: Ubuntu 22.04 (glibc 2.35, supported until
+# 2027), so the binary runs on Ubuntu 22.04+, Debian 12+, current Fedora, Arch and
+# SteamOS. Go itself is copied in from the official image.
+ARG GO_IMAGE=docker.io/library/golang:1.27-trixie
+FROM ${GO_IMAGE} AS go
+FROM docker.io/library/ubuntu:22.04
+RUN apt-get update -qq \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+      ca-certificates gcc libc6-dev pkg-config file desktop-file-utils \
+      libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=go /usr/local/go /usr/local/go
+ENV PATH=/usr/local/go/bin:/root/go/bin:$PATH GOTOOLCHAIN=local

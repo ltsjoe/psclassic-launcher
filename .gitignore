@@ -1,0 +1,6 @@
+/psclassic-updater
+/psclassic-launcher
+/dist/
+# Screenshots of the official Windows launcher, used as layout references only.
+# Not published: they show the game's artwork, which this launcher leaves out.
+/docs/windows-launcher-*.png

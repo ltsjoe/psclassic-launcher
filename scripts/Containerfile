@@ -1,0 +1,8 @@
+# Build environment for the GUI: Fyne needs cgo and the X11, Wayland and
+# OpenGL headers (GLFW builds both its X11 and Wayland back ends).
+ARG GO_IMAGE=docker.io/library/golang:1.27-trixie
+FROM ${GO_IMAGE}
+RUN apt-get update -qq \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+      libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols \
+ && rm -rf /var/lib/apt/lists/*
