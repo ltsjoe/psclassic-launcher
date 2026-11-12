@@ -37,7 +37,7 @@ mtime=$(git log -1 --format=%ct 2>/dev/null || date +%s)
 		tmp=\$(mktemp -d)
 		out=\$tmp/$name
 		mkdir -p \$out
-		go build -buildvcs=false -trimpath -ldflags='-s -w' -o \$out/psclassic-launcher ./cmd/psclassic-launcher
+		go build -buildvcs=false -trimpath -ldflags='-s -w -X github.com/ltsjoe/psclassic-launcher/internal/selfupdate.Flavor=steamrt4' -o \$out/psclassic-launcher ./cmd/psclassic-launcher
 		CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags='-s -w' -o \$out/psclassic-updater ./cmd/psclassic-updater
 		cp packaging/$id.desktop \$out/
 		cp cmd/psclassic-launcher/assets/icon.svg \$out/$id.svg

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ltsjoe/psclassic-launcher/internal/psc"
+	"github.com/ltsjoe/psclassic-launcher/internal/selfupdate"
 	"golang.org/x/term"
 )
 
@@ -309,6 +310,83 @@ func (a App) runners() int {
 	return 0
 }
 
+func (a App) gpus(configPath string) int {
+	cfg, _, err := LoadConfig(configPath)
+	if err != nil {
+		return fail(a.Name, err)
+	}
+	gpus := psc.FindGPUs()
+	if len(gpus) == 0 {
+		fmt.Println("No graphics cards found in /sys/class/drm.")
+		return 1
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	for _, g := range gpus {
+		note := g.Driver
+		if g.BootVGA {
+			note += ", default"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t(%s)\n", g.Card, strings.TrimPrefix(g.Slot, "0000:"), g.Name, note)
+	}
+	w.Flush()
+	fmt.Println()
+	on := cfg.Bool(psc.KeyDedicatedGPU, false)
+	g, ok, why := psc.DedicatedGPU(gpus)
+	switch {
+	case !ok && on:
+		fmt.Printf("dedicated_gpu is on, but %s, so it changes nothing.\n", why)
+	case !ok:
+		fmt.Printf("dedicated_gpu has nothing to do here: %s.\n", why)
+	default:
+		set, unset := g.Env()
+		state := "is off. With it on (settings dgpu=on),"
+		if on {
+			state = "is on:"
+		}
+		fmt.Printf("dedicated_gpu %s the game runs on %s, with\n  %s\n  and without %s\n",
+			state, g.Name, strings.Join(set, " "), strings.Join(unset, ", "))
+	}
+	return 0
+}
+
+func (a App) selfUpdate(args []string) int {
+	fs := flag.NewFlagSet("self-update", flag.ContinueOnError)
+	checkOnly := fs.Bool("check", false, "only say whether there is a newer version")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	key, err := selfupdate.ReleaseKey()
+	if err != nil {
+		return fail(a.Name, err)
+	}
+	ctx, stop := interrupted()
+	defer stop()
+	u := SelfUpdater(key)
+	rel, err := u.Latest(ctx)
+	if err != nil {
+		return fail(a.Name, err)
+	}
+	if rel == nil {
+		fmt.Printf("%s %s is the newest version.\n", a.Name, Version)
+		return 0
+	}
+	fmt.Printf("Version %s is available (you have %s): %s\n", rel.Version, Version, rel.Page)
+	if *checkOnly {
+		return 0
+	}
+	t, why := selfupdate.CurrentTarget()
+	if why != "" {
+		fmt.Printf("This copy can't update itself: %s. Download the new version from the page above.\n", why)
+		return 1
+	}
+	fmt.Printf("Downloading and checking the signed release...\n")
+	if err := u.Install(ctx, rel, t); err != nil {
+		return fail(a.Name, err)
+	}
+	fmt.Printf("Updated %s to %s. The new version runs the next time you start it.\n", t.Path, rel.Version)
+	return 0
+}
+
 func (a App) status(configPath string) int {
 	cfg, _, err := LoadConfig(configPath)
 	if err != nil {
@@ -361,6 +439,8 @@ var settingList = []setting{
 	{"voice_speakers", "speakers", "text", "Speakers (empty = Windows default)"},
 	{"voice_mic_volume", "mic_volume", "volume", "Microphone volume %"},
 	{"voice_out_volume", "voice_volume", "volume", "Voice volume %"},
+	{psc.KeyDedicatedGPU, "dgpu", "bool", "Run the game on the dedicated GPU (laptops with two GPUs; see: gpus)"},
+	{selfupdate.KeySelfUpdate, "", "bool", "Update the launcher by itself (AppImage and Steam Linux Runtime builds)"},
 }
 
 func (a App) settings(args []string, configPath string) int {
@@ -397,7 +477,7 @@ func (a App) settings(args []string, configPath string) int {
 		switch s.key {
 		case "hd_textures", "voice_on", "beta":
 			changedParts = true
-		case psc.KeyGameFolder, psc.KeyPrefix, psc.KeyRunnerPath:
+		case psc.KeyGameFolder, psc.KeyPrefix, psc.KeyRunnerPath, psc.KeyDedicatedGPU, selfupdate.KeySelfUpdate:
 		default:
 			changedGame = true
 		}
@@ -496,25 +576,27 @@ func (a App) showSettings(cfg *psc.Config) {
 		return "off"
 	}
 	val := map[string]string{
-		psc.KeyGameFolder:      game,
-		psc.KeyPrefix:          cfg.String(psc.KeyPrefix, ""),
-		psc.KeyRunnerPath:      cfg.String(psc.KeyRunnerPath, ""),
-		"max_fps":              strconv.Itoa(pp.MaxFPS),
-		"indoor_particles_fix": onOff(pp.IndoorWeatherFix),
-		"dark_nights":          onOff(pp.DarkNights),
-		"empire_darklight":     onOff(pp.EmpireDarklight),
-		"hd_textures":          onOff(pp.HDTextures),
-		"beta":                 onOff(pp.Beta),
-		"flashlight":           onOff(pp.Flashlight),
-		"flashlight_key":       psc.KeyDisplay(pp.FlashlightKey),
-		"voice_on":             onOff(vp.On),
-		"voice_squad_key":      psc.KeyDisplay(vp.Keys[0]),
-		"voice_ally_key":       psc.KeyDisplay(vp.Keys[1]),
-		"voice_nearby_key":     psc.KeyDisplay(vp.Keys[2]),
-		"voice_mic":            vp.Mic,
-		"voice_speakers":       vp.Speakers,
-		"voice_mic_volume":     strconv.Itoa(vp.MicVolume),
-		"voice_out_volume":     strconv.Itoa(vp.OutVolume),
+		psc.KeyGameFolder:        game,
+		psc.KeyPrefix:            cfg.String(psc.KeyPrefix, ""),
+		psc.KeyRunnerPath:        cfg.String(psc.KeyRunnerPath, ""),
+		"max_fps":                strconv.Itoa(pp.MaxFPS),
+		"indoor_particles_fix":   onOff(pp.IndoorWeatherFix),
+		"dark_nights":            onOff(pp.DarkNights),
+		"empire_darklight":       onOff(pp.EmpireDarklight),
+		"hd_textures":            onOff(pp.HDTextures),
+		"beta":                   onOff(pp.Beta),
+		"flashlight":             onOff(pp.Flashlight),
+		"flashlight_key":         psc.KeyDisplay(pp.FlashlightKey),
+		"voice_on":               onOff(vp.On),
+		"voice_squad_key":        psc.KeyDisplay(vp.Keys[0]),
+		"voice_ally_key":         psc.KeyDisplay(vp.Keys[1]),
+		"voice_nearby_key":       psc.KeyDisplay(vp.Keys[2]),
+		"voice_mic":              vp.Mic,
+		"voice_speakers":         vp.Speakers,
+		"voice_mic_volume":       strconv.Itoa(vp.MicVolume),
+		"voice_out_volume":       strconv.Itoa(vp.OutVolume),
+		psc.KeyDedicatedGPU:      onOff(cfg.Bool(psc.KeyDedicatedGPU, false)),
+		selfupdate.KeySelfUpdate: onOff(cfg.Bool(selfupdate.KeySelfUpdate, true)),
 	}
 	fmt.Println("Settings file:", cfg.Path())
 	fmt.Println()

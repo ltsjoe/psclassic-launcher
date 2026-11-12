@@ -55,7 +55,7 @@ out="dist/psclassic-launcher-$version-x86_64.AppImage"
 		go version
 		app=\$(mktemp -d)/AppDir
 		mkdir -p \$app/usr/bin \$app/usr/share/applications \$app/usr/share/icons/hicolor/scalable/apps
-		go build -buildvcs=false -trimpath -ldflags='-s -w' -o \$app/usr/bin/psclassic-launcher ./cmd/psclassic-launcher
+		go build -buildvcs=false -trimpath -ldflags='-s -w -X github.com/ltsjoe/psclassic-launcher/internal/selfupdate.Flavor=appimage' -o \$app/usr/bin/psclassic-launcher ./cmd/psclassic-launcher
 		cp packaging/$id.desktop \$app/usr/share/applications/
 		cp cmd/psclassic-launcher/assets/icon.svg \$app/usr/share/icons/hicolor/scalable/apps/$id.svg
 		cp packaging/$id.desktop \$app/

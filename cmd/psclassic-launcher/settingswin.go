@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ltsjoe/psclassic-launcher/internal/psc"
+	"github.com/ltsjoe/psclassic-launcher/internal/selfupdate"
 )
 
 const defaultDevice = "Windows default"
@@ -32,6 +33,7 @@ type settingsUI struct {
 	runner                               *widget.Select
 	runnerPaths                          map[string]string // option label -> path
 	prefix                               *widget.Entry
+	dgpu, selfUpdate                     *widget.Check
 	saved, setupChanged                  bool
 }
 
@@ -42,7 +44,7 @@ func newSettingsUI(m *launcherUI) *settingsUI {
 	s.win.SetFixedSize(true)
 	s.win.SetIcon(appIcon)
 	s.win.SetContent(s.build())
-	s.win.Resize(fyne.NewSize(900, 690))
+	s.win.Resize(fyne.NewSize(900, 724))
 	s.win.CenterOnScreen()
 	s.loadLogin()
 	return s
@@ -162,12 +164,41 @@ func (s *settingsUI) build() fyne.CanvasObject {
 	add(place(s.prefix, 150, 602, 600, 28))
 	add(place(newFlatButton("Change...", false, s.choosePrefix), 760, 602, 120, 28))
 
+	// Laptops with two GPUs: run the game on the dedicated one.
+	gpu, gpuOK, why := psc.DedicatedGPU(psc.FindGPUs())
+	gpuText := "Use the dedicated GPU"
+	if gpuOK {
+		gpuText += ": " + shorten(gpu.Name, 44)
+	} else {
+		gpuText += " (" + shorten(why, 44) + ")"
+	}
+	s.dgpu = check(gpuText, cfg.Bool(psc.KeyDedicatedGPU, false))
+	if !gpuOK {
+		s.dgpu.Disable()
+	}
+	add(place(s.dgpu, 14, 636, 470, 30))
+	s.selfUpdate = check("Update the launcher by itself", cfg.Bool(selfupdate.KeySelfUpdate, true))
+	if _, why := selfupdate.CurrentTarget(); why != "" {
+		s.selfUpdate.SetText("Update the launcher by itself (release builds only)")
+		s.selfUpdate.Disable()
+	}
+	add(place(s.selfUpdate, 494, 636, 386, 30))
+
 	// Save and Cancel sit at the bottom right, under the Linux rows.
 	save := newFlatButton("Save", true, s.save)
 	save.active = true
-	add(place(save, 680, 640, 100, 34))
-	add(place(newFlatButton("Cancel", false, func() { s.win.Close() }), 790, 640, 90, 34))
+	add(place(save, 680, 676, 100, 34))
+	add(place(newFlatButton("Cancel", false, func() { s.win.Close() }), 790, 676, 90, 34))
 	return newBox(nil, objs...)
+}
+
+// shorten cuts s to at most n characters, ending in "…" when cut.
+func shorten(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
 }
 
 func deviceSelect(names []string, cur string) *widget.Select {
@@ -309,6 +340,12 @@ func (s *settingsUI) save() {
 	if p := strings.TrimSpace(s.prefix.Text); p != cfg.String(psc.KeyPrefix, "") {
 		cfg.Set(psc.KeyPrefix, p)
 		s.setupChanged = true
+	}
+	if !s.dgpu.Disabled() {
+		cfg.SetBool(psc.KeyDedicatedGPU, s.dgpu.Checked)
+	}
+	if !s.selfUpdate.Disabled() {
+		cfg.SetBool(selfupdate.KeySelfUpdate, s.selfUpdate.Checked)
 	}
 
 	// The keyring can be slow or ask to be unlocked, so the rest runs off the

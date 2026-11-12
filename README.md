@@ -22,7 +22,10 @@ for x86_64 Linux. Pick one:
 | `psclassic-launcher-<version>-x86_64.AppImage` | The launcher as one file. Runs on any distro with glibc 2.35 or newer. Make it executable and run it. |
 | `psclassic-launcher-<version>-steamrt4-x86_64.tar.gz` | Both programs, built in Valve's **Steam Linux Runtime 4.0** SDK. Runs inside the Steam Linux Runtime 4.0 container, or directly on a distro with glibc 2.38 or newer (SteamOS, Debian 13, Ubuntu 24.04, current Fedora and Arch). Also has `psclassic-updater` for Heroic. |
 
-`SHA256SUMS` in the release lists the checksums. Check a download with
+Both builds keep themselves up to date from these releases, and only install a
+release signed with the project's release key (see
+[Launcher updates](#launcher-updates-and-signatures)). `SHA256SUMS` in the release
+lists the checksums, and `SHA256SUMS.minisig` is its signature. Check a download with
 `sha256sum -c SHA256SUMS --ignore-missing`.
 
 ## Why
@@ -49,8 +52,10 @@ installed and up to date.
 
 **Settings** has the Windows launcher's options (frame rate limit, indoor weather
 fix, dark nights, Darklight colour, HD pack, beta branch, the saved login, voice
-chat keys, devices and volumes, the flashlight and its key) plus a **Linux** row:
-which Proton or Wine runs the game, and the prefix. Fyne can't see the side mouse
+chat keys, devices and volumes, the flashlight and its key) plus a **Linux** section:
+which Proton or Wine runs the game, the prefix, **Use the dedicated GPU** for gaming
+laptops (see [Laptops with two GPUs](#laptops-with-two-gpus)), and **Update the
+launcher by itself**. Fyne can't see the side mouse
 buttons, so to set Mouse 4 or 5 as a key, right-click the key button.
 
 **PLAY** does what the Windows launcher does, then runs the game through Proton or Wine:
@@ -81,7 +86,10 @@ psclassic-launcher login          # save a login (asks for the code without show
 psclassic-launcher login -from-game   # take it from the game's chat.log, like the button
 psclassic-launcher logout
 psclassic-launcher runners        # Proton and Wine builds found on this machine
+psclassic-launcher gpus           # graphics cards, and which one dgpu=on would use
+psclassic-launcher settings dgpu=on   # run the game on a laptop's dedicated GPU
 psclassic-launcher status         # players online and the news
+psclassic-launcher self-update    # update this launcher now (-check: only look)
 ```
 
 `play -yes` installs updates without asking, `play -no-update` skips the check,
@@ -138,6 +146,55 @@ environment variable to that entry.
 A game folder reached through a prefix's `dosdevices/c:` link is turned into the real
 `drive_c/...` path first. A `c:` in the middle of a Windows path breaks the game:
 `PSCCX.ocx` can't find itself and the game stops with *"Runtime error 217"*.
+
+## Laptops with two GPUs
+
+Gaming laptops have the processor's integrated GPU, which drives the screen and which
+programs use by default, and a dedicated AMD or NVIDIA GPU. Tick **Use the dedicated GPU**
+in Settings (or `psclassic-launcher settings dgpu=on`) to run the game on the dedicated
+one. The checkbox names the GPU it will use; `psclassic-launcher gpus` lists them all.
+
+It works like GNOME's and KDE's "Launch using Dedicated Graphics Card":
+
+- **NVIDIA's own driver:** PRIME render offload (`__NV_PRIME_RENDER_OFFLOAD=1`,
+  `__GLX_VENDOR_LIBRARY_NAME=nvidia`, `__VK_LAYER_NV_optimus=NVIDIA_only`), the same as
+  `prime-run`.
+- **AMD, Intel Arc, or NVIDIA with nouveau (Mesa):** `DRI_PRIME=pci-<address>` of the
+  dedicated GPU, which Mesa's OpenGL and Vulkan both follow.
+
+For the game only, it also removes `VK_DRIVER_FILES`, `VK_ICD_FILENAMES`,
+`__EGL_VENDOR_LIBRARY_FILENAMES` and `MESA_VK_DEVICE_SELECT`. A desktop that keeps apps
+on the integrated GPU often sets those, and they would hold the game there no matter
+what else is set. That is why other launchers' "dedicated GPU" switches sometimes
+change nothing. The game log (`~/.cache/psclassic-launcher/game.log`) starts with the
+GPU it used. On a machine with one GPU, or a desktop whose screen already runs on the
+dedicated GPU, the switch is greyed out.
+
+## Launcher updates and signatures
+
+The AppImage and the Steam Linux Runtime build update themselves. When the window
+opens, the launcher asks GitHub for the newest
+[release](https://github.com/ltsjoe/psclassic-launcher/releases). If it is newer, the
+launcher downloads it in the background and swaps it in, and the top left of the window
+says "restart to use it". The AppImage replaces its own file. The Steam Linux Runtime
+build replaces `psclassic-launcher`, and `psclassic-updater` next to it, and nothing
+else in its folder. Untick **Update the launcher by itself** in Settings (or
+`settings self_update=off`) to stop it, and use `psclassic-launcher self-update` to
+update from a terminal. Builds from source don't update themselves.
+
+An update is installed only when it is signed by the project's release key. Each release
+has `SHA256SUMS` and its [minisign](https://jedisct1.github.io/minisign/) signature,
+`SHA256SUMS.minisig`. The launcher checks the signature with the public key built into it
+([`internal/selfupdate/release.pub`](internal/selfupdate/release.pub)), checks that it is
+for the version it is about to install, and checks the download against `SHA256SUMS`.
+If any of that fails, nothing is changed. So someone who took over the GitHub account
+could not push an update without the key too. You can check a release yourself the same
+way:
+
+```sh
+minisign -Vm SHA256SUMS -p release.pub     # release.pub from this repository
+sha256sum -c SHA256SUMS --ignore-missing
+```
 
 ## Heroic: update on every launch
 
@@ -222,6 +279,26 @@ runtime's `run` script. Heroic and Lutris (through umu) keep a copy in
 cd psclassic-launcher-<version>-steamrt4-x86_64
 ~/.local/share/umu/steamrt4/run -- ./psclassic-launcher
 ```
+
+### Making a release
+
+1. Raise `Version` in `internal/cli/cli.go` and merge that (through a pull request).
+2. On the merged `main`, build both files and their checksums:
+
+   ```sh
+   scripts/appimage.sh && scripts/steamrt.sh
+   (cd dist && sha256sum psclassic-launcher-<version>-x86_64.AppImage \
+       psclassic-launcher-<version>-steamrt4-x86_64.tar.gz > SHA256SUMS)
+   ```
+
+3. Sign them, in a normal terminal (it unlocks Bitwarden, where the release key is kept):
+   `scripts/sign-release.sh` writes `dist/SHA256SUMS.minisig` and checks it.
+4. Publish a GitHub release `v<version>` with the four files. A release without a valid
+   `SHA256SUMS.minisig` is never installed by the launcher.
+
+`scripts/make-signing-key.sh` made the release key once; don't run it again unless the
+key has to be replaced. A new key means every installed launcher stops accepting updates
+until it is updated by hand.
 
 ## Contributing
 
