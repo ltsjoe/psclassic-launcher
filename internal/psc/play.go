@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -108,6 +109,14 @@ func Play(ctx context.Context, c *Config, login LoginStore, opt PlayOptions) (*G
 		return nil, err
 	}
 	cmd.Stdout, cmd.Stderr = out, out
+	if setup.GPU != nil {
+		set, _ := setup.GPU.Env()
+		fmt.Fprintf(out, "psclassic-launcher: running the game on the dedicated GPU, %s (%s; %s)\n",
+			setup.GPU.Name, setup.GPU.Slot, strings.Join(set, " "))
+	} else if c.Bool(KeyDedicatedGPU, false) {
+		_, _, why := DedicatedGPU(FindGPUs())
+		warn("The dedicated GPU setting is on, but " + why + ".")
+	}
 	if err := cmd.Start(); err != nil {
 		closeFile(logFile)
 		return nil, fmt.Errorf("could not start the game with %s: %w", setup.Runner.Name, err)

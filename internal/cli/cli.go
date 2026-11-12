@@ -18,10 +18,11 @@ import (
 	"time"
 
 	"github.com/ltsjoe/psclassic-launcher/internal/psc"
+	"github.com/ltsjoe/psclassic-launcher/internal/selfupdate"
 )
 
 // Version is the launcher's version.
-var Version = "0.2.0"
+var Version = "0.3.0"
 
 // DefaultSource is the Planetside Classic update server.
 const DefaultSource = "https://patch.blackarmoredreapers.com"
@@ -45,6 +46,11 @@ func HTTPClient() *http.Client {
 		ResponseHeaderTimeout: 60 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 	}}
+}
+
+// SelfUpdater checks the project's GitHub releases for a newer launcher.
+func SelfUpdater(key selfupdate.PublicKey) *selfupdate.Updater {
+	return &selfupdate.Updater{Client: HTTPClient(), UserAgent: UserAgent(), Current: Version, Key: key}
 }
 
 // App is one of the two programs.
@@ -93,6 +99,10 @@ func (a App) Main(args []string) int {
 		return a.settings(rest, configPath)
 	case "runners":
 		return a.runners()
+	case "gpus":
+		return a.gpus(configPath)
+	case "self-update":
+		return a.selfUpdate(rest)
 	case "status", "news":
 		return a.status(configPath)
 	case "version", "-version", "--version":
@@ -131,6 +141,10 @@ Commands:
   settings   show the settings
   settings KEY=VALUE ...   change settings, e.g.  settings fps=240 hd=on squad_key=V
   runners    list the Proton and Wine builds found on this machine
+  gpus       list the graphics cards, and which one the dedicated_gpu setting uses
+  self-update  update this launcher from the project's signed GitHub releases
+               (the AppImage and the Steam Linux Runtime build; the window does it by itself)
+               -check      only say whether there is a newer version
   status     news, game version and players online
   gui        open the launcher window
   version    print the version

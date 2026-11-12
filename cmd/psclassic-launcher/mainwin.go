@@ -21,6 +21,7 @@ import (
 
 	"github.com/ltsjoe/psclassic-launcher/internal/cli"
 	"github.com/ltsjoe/psclassic-launcher/internal/psc"
+	"github.com/ltsjoe/psclassic-launcher/internal/selfupdate"
 )
 
 // launcherUI is the main window. Its fields are only touched on Fyne's UI
@@ -31,6 +32,7 @@ type launcherUI struct {
 	cfg  *psc.Config
 	keys psc.Keyring
 
+	launcherVer *canvas.Text
 	gameVersion *widget.Label
 	online      *widget.Label
 	news        *widget.Label
@@ -75,6 +77,7 @@ func (ui *launcherUI) build() fyne.CanvasObject {
 	objs = append(objs, header()...)
 
 	ver := newText("Launcher v"+cli.Version+" (Linux)", colText2, 11, false)
+	ui.launcherVer = ver
 	objs = append(objs, place(ver, 8, 4, ver.MinSize().Width, 16))
 	ui.gameVersion = widget.NewLabel("")
 	ui.gameVersion.Alignment = fyne.TextAlignTrailing
@@ -216,6 +219,60 @@ func (ui *launcherUI) start(notes []string) {
 	}
 	ui.loadNews()
 	ui.startCheck()
+	ui.startSelfUpdate()
+}
+
+// startSelfUpdate looks for a newer launcher in the background and, for the
+// release builds, installs it (only when it is signed by the release key). The
+// new version runs the next time the launcher starts; the label at the top left
+// says so.
+func (ui *launcherUI) startSelfUpdate() {
+	if ui.offline || !ui.cfg.Bool(selfupdate.KeySelfUpdate, true) {
+		return
+	}
+	target, why := selfupdate.CurrentTarget()
+	if why != "" {
+		return
+	}
+	key, err := selfupdate.ReleaseKey()
+	if err != nil {
+		return
+	}
+	u := cli.SelfUpdater(key)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		defer cancel()
+		rel, err := u.Latest(ctx)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "launcher update:", err)
+			return
+		}
+		if rel == nil {
+			return
+		}
+		fyne.Do(func() { ui.setLauncherNote("downloading v"+rel.Version+"...", colText2) })
+		err = u.Install(ctx, rel, target)
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "launcher update:", err)
+				msg := "update to v" + rel.Version + " failed"
+				if errors.Is(err, selfupdate.ErrBadSignature) {
+					msg = "update to v" + rel.Version + " refused: not signed by the release key"
+				}
+				ui.setLauncherNote(msg, colBad)
+				return
+			}
+			ui.setLauncherNote("updated to v"+rel.Version+", restart to use it", colAccent)
+		})
+	}()
+}
+
+// setLauncherNote adds a note after the launcher's version at the top left.
+func (ui *launcherUI) setLauncherNote(note string, c color.Color) {
+	ui.launcherVer.Text = "Launcher v" + cli.Version + " (Linux): " + note
+	ui.launcherVer.Color = c
+	ui.launcherVer.Resize(ui.launcherVer.MinSize())
+	ui.launcherVer.Refresh()
 }
 
 func (ui *launcherUI) loadNews() {

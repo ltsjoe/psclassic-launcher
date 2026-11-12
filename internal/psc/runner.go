@@ -243,6 +243,7 @@ type Setup struct {
 	Runner Runner
 	Prefix string // Proton: the folder that holds pfx/ (STEAM_COMPAT_DATA_PATH); Wine: WINEPREFIX
 	Game   string // game folder on disk
+	GPU    *GPU   // the dedicated GPU to run on (the dedicated_gpu setting); nil for the default
 }
 
 // SetupFromConfig reads the runner, prefix and game folder from the settings.
@@ -267,6 +268,11 @@ func SetupFromConfig(c *Config) (Setup, error) {
 	}
 	if s.Game == "" {
 		return s, errors.New("no game folder is chosen yet")
+	}
+	if c.Bool(KeyDedicatedGPU, false) {
+		if g, ok, _ := DedicatedGPU(FindGPUs()); ok {
+			s.GPU = &g
+		}
 	}
 	return s, nil
 }
@@ -345,6 +351,16 @@ func (s Setup) Command(ctx context.Context, exe string, args []string, extraEnv 
 	default:
 		return nil, fmt.Errorf("unknown runner kind %q", s.Runner.Kind)
 	}
+	if s.GPU != nil {
+		set, unset := s.GPU.Env()
+		for _, k := range unset {
+			env = unsetEnv(env, k)
+		}
+		for _, kv := range set {
+			k, v, _ := strings.Cut(kv, "=")
+			env = setEnv(env, k, v)
+		}
+	}
 	for _, kv := range extraEnv {
 		k, v, _ := strings.Cut(kv, "=")
 		env = setEnv(env, k, v)
@@ -379,13 +395,17 @@ func steamClientPath() string {
 }
 
 func setEnv(env []string, key, value string) []string {
+	return append(unsetEnv(env, key), key+"="+value)
+}
+
+func unsetEnv(env []string, key string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
 		if !strings.HasPrefix(kv, key+"=") {
 			out = append(out, kv)
 		}
 	}
-	return append(out, key+"="+value)
+	return out
 }
 
 // IsRunning reports whether a Windows program with this file name (ignoring
